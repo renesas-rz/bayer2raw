@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <drm/drm_fourcc.h>
 
 #include "bayer2raw.h"
 
@@ -10,7 +11,20 @@
 
 #define PRINT_OGL_ERROR() print_opengl_error(__FILE__, __LINE__)
 
-static int re_paint = 0;
+typedef EGLImageKHR (*EGLCREATEIMAGEKHR)(EGLDisplay dpy, EGLContext ctx,
+                                         EGLenum target, EGLClientBuffer buffer,
+                                         EGLint* attr_list);
+typedef EGLBoolean (*EGLDESTROYIMAGEKHR)(EGLDisplay dpy, EGLImageKHR image);
+typedef void (*PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC)(GLenum target,
+                                                              GLeglImageOES image);
+int import_extern_outbuf(struct context_bayer2rgb *ctx,
+                         struct extern_buffer *buffer);
+
+static EGLCREATEIMAGEKHR eglCreateImageKHR  = 0;
+static EGLDESTROYIMAGEKHR eglDestroyImageKHR = 0;
+static PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC
+         glEGLImageTargetRenderbufferStorage = 0;
+
 /* opengl screen_vertices for texture mapping */
 static const GLfloat screen_vertices[][2] = {
   {-1.0f, -1.0f},
@@ -19,12 +33,23 @@ static const GLfloat screen_vertices[][2] = {
   {1.0f, 1.0f}
 };
 
+/* vertical flipping of screen_vertices */
+static const GLfloat flip_screen_vertices[][2] = {
+  {-1.0f, 1.0f},
+  {1.0f, 1.0f},
+  {-1.0f, -1.0f},
+  {1.0f, -1.0f},
+};
+
 static const GLfloat texture_coords[][2] = {
   {0.0f, 1.0f},
   {1.0f, 1.0f},
   {0.0f, 0.0f},
   {1.0f, 0.0f}
 };
+
+/* For dynamic vertices data*/
+static GLfloat *vertices_data = &screen_vertices[0][0];
 
 static int
 compile_shader (const char *FName, GLuint shader_handle)
@@ -190,7 +215,7 @@ init_bayer_rgb_conversion (struct context_bayer2rgb *ctx)
 
   /* Set data in the arrays. */
   glVertexAttribPointer ((GLuint) loc_vertices, 2, GL_FLOAT, GL_FALSE, 0,
-      &screen_vertices[0][0]);
+      vertices_data);
   glVertexAttribPointer ((GLuint) loc_texcoord, 2, GL_FLOAT, GL_FALSE, 0,
       &texture_coords[0][0]);
   PRINT_OGL_ERROR ();
@@ -220,23 +245,195 @@ init_bayer_rgb_conversion (struct context_bayer2rgb *ctx)
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   PRINT_OGL_ERROR ();
 
+  ctx->re_paint = 0;
+
   return 0;
+}
+
+int
+init_bayer_rgb_conversion_extern_output(struct context_bayer2rgb *ctx)
+{
+  eglCreateImageKHR  = (EGLCREATEIMAGEKHR)
+                       eglGetProcAddress("eglCreateImageKHR");
+  eglDestroyImageKHR = (EGLDESTROYIMAGEKHR)
+                       eglGetProcAddress("eglDestroyImageKHR");
+  glEGLImageTargetRenderbufferStorage =
+                   (PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC)
+                   eglGetProcAddress("glEGLImageTargetRenderbufferStorageOES");
+  /* When using external output buffer, the read/write memory order is different
+   * with internal GLES, so that we need to use the other vertices*/
+  vertices_data = &flip_screen_vertices[0][0];
+  return init_bayer_rgb_conversion(ctx);
+}
+
+int bayer2raw_create_outbuf(struct context_bayer2rgb *ctx,
+                            unsigned long address)
+{
+  struct extern_buffer buffer;
+  EGLNativePixmapTypeREL  sNativePixmap;
+  NativePixmapType eglPixmap;
+
+  sNativePixmap.width    = ctx->width;
+  sNativePixmap.height   = ctx->height;
+  sNativePixmap.stride   = ctx->width;
+  sNativePixmap.usage    = 0;
+  sNativePixmap.pixelData    = (void*)address;
+  sNativePixmap.format   = EGL_NATIVE_PIXFORMAT_ARGB8888_REL;
+  eglPixmap = (NativeWindowType)&sNativePixmap;
+  buffer.pEGLImage = eglCreateImageKHR(ctx->display,
+                                      EGL_NO_CONTEXT,
+                                      EGL_NATIVE_PIXMAP_KHR,
+                                      eglPixmap, NULL);
+
+
+  if (buffer.pEGLImage == EGL_NO_IMAGE_KHR){
+    printf("%s: Can not init eglImageKHR. %x\n", __FUNCTION__, eglGetError());
+    return -1;
+  }
+
+  return import_extern_outbuf(ctx, &buffer);
+}
+
+int bayer2raw_create_outbuf_dmabuf(struct context_bayer2rgb *ctx, int dma_fd)
+{
+  struct extern_buffer buffer;
+
+  if (dma_fd <= 0) {
+    printf("%s: The input FD is invalid \n", __FUNCTION__);
+    return -1;
+  }
+
+  int attrib[] = {
+              EGL_WIDTH, ctx->width,
+              EGL_HEIGHT, ctx->height,
+              EGL_LINUX_DRM_FOURCC_EXT, DRM_FORMAT_ARGB8888,
+              EGL_DMA_BUF_PLANE0_FD_EXT, dma_fd,
+              EGL_DMA_BUF_PLANE0_OFFSET_EXT, 0,
+              EGL_DMA_BUF_PLANE0_PITCH_EXT, ctx->width * 4,
+              EGL_NONE
+    };
+
+  buffer.pEGLImage = eglCreateImageKHR(ctx->display, EGL_NO_CONTEXT,
+                                        EGL_LINUX_DMA_BUF_EXT, NULL, attrib);
+  if (buffer.pEGLImage == EGL_NO_IMAGE_KHR){
+    printf("%s: Can not init eglImageKHR. %x\n", __FUNCTION__, eglGetError());
+    return -1;
+  }
+
+  return import_extern_outbuf(ctx, &buffer);
+}
+
+int import_extern_outbuf(struct context_bayer2rgb *ctx,
+                         struct extern_buffer *buffer)
+{
+  int index = -1;
+  void *tmp;
+
+  glGenFramebuffers(1, (GLuint *)&buffer->fb);
+  glGenRenderbuffers(1, (GLuint *)&buffer->rb);
+
+  if (buffer->fb >= 0)
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)buffer->fb);
+  else
+    goto invalid_fb;
+  if (buffer->rb >= 0)
+    glBindRenderbuffer(GL_RENDERBUFFER, (GLuint)buffer->rb);
+  else
+    goto invalid_rb;
+
+  glEGLImageTargetRenderbufferStorage(GL_RENDERBUFFER, buffer->pEGLImage);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                            GL_RENDERBUFFER, (GLuint)buffer->rb);
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    printf("Can not init the new framebuffer for external image. %x\n",
+             glGetError());
+    goto invalid_rb;
+  }
+  glBindRenderbuffer(GL_RENDERBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  index = ctx->num_outbuf;
+  /* Extend the list one more member*/
+  tmp = (struct extern_buffer *)realloc(ctx->out_buf,
+                                        sizeof(struct extern_buffer) *
+                                        (long unsigned int)(ctx->num_outbuf + 1));
+  if (!tmp) {
+    /* If we can't allocate for importing more, deny and use the old list*/
+    printf("Out of Memory \n");
+    index = -1;
+    goto invalid_rb;
+  }
+
+  ctx->out_buf = tmp;
+
+  buffer->repaint = 0;
+
+  ctx->out_buf[index] = *buffer;
+  ctx->num_outbuf++;
+  goto done;
+
+invalid_rb:
+  if (buffer->rb > 0) {
+    glDeleteRenderbuffers(1, (GLuint *)&buffer->rb);
+    buffer->rb = -1;
+  }
+invalid_fb:
+  if (buffer->fb > 0) {
+    glDeleteFramebuffers(1, (GLuint *)&buffer->fb);
+    buffer->fb = -1;
+  }
+done:
+  return index;
+}
+
+int
+bayer2raw_attach_render_outbuf(struct context_bayer2rgb *ctx, int index)
+{
+  if (index < 0)
+    return -1;
+
+  glBindFramebuffer( GL_FRAMEBUFFER, (GLuint)ctx->out_buf[index].fb);
+  ctx->re_paint = ctx->out_buf[index].repaint;
+  if (!ctx->out_buf[index].repaint)
+    ctx->out_buf[index].repaint = 1;
+
+  return 0;
+}
+
+void
+bayer2raw_free_all_outbuf(struct context_bayer2rgb *ctx)
+{
+  int i;
+  struct extern_buffer *buffer;
+
+  for (i = 0; i < ctx->num_outbuf; i++) {
+    buffer = &ctx->out_buf[i];
+    if (buffer->pEGLImage != EGL_NO_IMAGE_KHR)
+      eglDestroyImageKHR(ctx->display, buffer->pEGLImage);
+    if (buffer->rb > 0)
+      glDeleteRenderbuffers(1, (GLuint *)&buffer->rb);
+    if (buffer->fb > 0)
+      glDeleteFramebuffers(1, (GLuint *)&buffer->fb);
+  }
+  ctx->num_outbuf = 0;
+  if (ctx->out_buf)
+    free(ctx->out_buf);
 }
 
 void
 bayer_rgb_conversion(struct context_bayer2rgb *ctx, void *in_buf)
 {
-    /* Map the bayer buffer */
+  /* Map the bayer buffer */
   glBindTexture (GL_TEXTURE_2D, ctx->bayer_texture);
 
-  if (!re_paint) {
+  if (!ctx->re_paint) {
     glTexImage2D (GL_TEXTURE_2D, 0, GL_LUMINANCE, ctx->width, ctx->height,
         0, GL_LUMINANCE, GL_UNSIGNED_BYTE, in_buf);
     /* This step for cover the case that we won't use external output buffer*/
-    re_paint++;
+    ctx->re_paint++;
   } else {
-     glTexSubImage2D (GL_TEXTURE_2D, 0, 0, 0, ctx->width, ctx->height,
-        GL_LUMINANCE, GL_UNSIGNED_BYTE, in_buf);
+    glTexSubImage2D (GL_TEXTURE_2D, 0, 0, 0, ctx->width, ctx->height,
+      GL_LUMINANCE, GL_UNSIGNED_BYTE, in_buf);
   }
 
   /* Draw on framebufer */
