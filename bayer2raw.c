@@ -10,6 +10,7 @@
 
 #define PRINT_OGL_ERROR() print_opengl_error(__FILE__, __LINE__)
 
+static int re_paint = 0;
 /* opengl screen_vertices for texture mapping */
 static const GLfloat screen_vertices[][2] = {
   {-1.0f, -1.0f},
@@ -223,25 +224,36 @@ init_bayer_rgb_conversion (struct context_bayer2rgb *ctx)
 }
 
 void
-do_bayer_rgb_conversion (struct context_bayer2rgb *ctx, void *in_buf,
-    void *out_buf)
+bayer_rgb_conversion(struct context_bayer2rgb *ctx, void *in_buf)
 {
-  /* Empty the RGB texture */
-  glBindTexture (GL_TEXTURE_2D, ctx->rgb_texture);
-  glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, ctx->width, ctx->height,
-      0, GL_RGB, GL_UNSIGNED_BYTE, 0);
-
-  /* Map the bayer buffer */
+    /* Map the bayer buffer */
   glBindTexture (GL_TEXTURE_2D, ctx->bayer_texture);
-  glTexImage2D (GL_TEXTURE_2D, 0, GL_LUMINANCE, ctx->width, ctx->height,
-      0, GL_LUMINANCE, GL_UNSIGNED_BYTE, in_buf);
+
+  if (!re_paint) {
+    glTexImage2D (GL_TEXTURE_2D, 0, GL_LUMINANCE, ctx->width, ctx->height,
+        0, GL_LUMINANCE, GL_UNSIGNED_BYTE, in_buf);
+    /* This step for cover the case that we won't use external output buffer*/
+    re_paint++;
+  } else {
+     glTexSubImage2D (GL_TEXTURE_2D, 0, 0, 0, ctx->width, ctx->height,
+        GL_LUMINANCE, GL_UNSIGNED_BYTE, in_buf);
+  }
 
   /* Draw on framebufer */
   glDrawArrays (GL_TRIANGLE_STRIP, 0, 4);
+}
 
-  /* Get back the buffer */
-  glReadPixels (0, 0, ctx->width, ctx->height, GL_RGBA,
-      GL_UNSIGNED_BYTE, out_buf);
+void
+do_bayer_rgb_conversion (struct context_bayer2rgb *ctx, void *in_buf,
+    void *out_buf)
+{
+  bayer_rgb_conversion (ctx, in_buf);
+
+  if (out_buf) {
+    /* Get back the buffer */
+    glReadPixels (0, 0, ctx->width, ctx->height, GL_RGBA,
+        GL_UNSIGNED_BYTE, out_buf);
+  }
   PRINT_OGL_ERROR ();
 }
 
@@ -249,18 +261,8 @@ void
 do_bayer_rgb_conversion_texture(struct context_bayer2rgb *ctx, void *in_buf,
     GLuint *texture)
 {
-  /* Empty the RGB texture */
-  glBindTexture (GL_TEXTURE_2D, ctx->rgb_texture);
-  glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, ctx->width, ctx->height,
-      0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+  bayer_rgb_conversion (ctx, in_buf);
 
-  /* Map the bayer buffer */
-  glBindTexture (GL_TEXTURE_2D, ctx->bayer_texture);
-  glTexImage2D (GL_TEXTURE_2D, 0, GL_LUMINANCE, ctx->width, ctx->height,
-      0, GL_LUMINANCE, GL_UNSIGNED_BYTE, in_buf);
-
-  /* Draw on framebufer */
-  glDrawArrays (GL_TRIANGLE_STRIP, 0, 4);
-
-  *texture = ctx->rgb_texture;
+  if (texture)
+    *texture = ctx->rgb_texture;
 }
