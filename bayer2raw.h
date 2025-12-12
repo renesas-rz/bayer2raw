@@ -12,6 +12,7 @@
 struct extern_buffer {
   int repaint;
   int fb, rb;
+  int dma_fd;
   EGLImageKHR pEGLImage;
 };
 
@@ -34,6 +35,8 @@ struct context_bayer2rgb
 
   int num_outbuf;
   struct extern_buffer *out_buf;
+  int num_inbuf;
+  struct extern_buffer *in_buf;
 };
 
 /* Required: all public members */
@@ -48,12 +51,16 @@ int bayer2raw_create_outbuf_dmabuf(struct context_bayer2rgb *ctx,
                                    int dma_fd);
 /* Select framebuffer in out_buf list that GLES will render to */
 int bayer2raw_attach_render_outbuf(struct context_bayer2rgb *ctx, int index);
+/* Release all DMA-BUF input buffer */
+void bayer2raw_free_all_inbuf(struct context_bayer2rgb *ctx);
 /* Free/release all framebuffer that created by external memory */
 void bayer2raw_free_all_outbuf(struct context_bayer2rgb *ctx);
 /* Get the bayer to RGB conversion done */
 void do_bayer_rgb_conversion(struct context_bayer2rgb *ctx, void *in_buf,
     void *out_buf);
 void do_bayer_rgb_conversion_texture(struct context_bayer2rgb *ctx, void *in_buf,
+    GLuint *texture);
+int do_bayer_rgb_conversion_texture_dmabuf(struct context_bayer2rgb *ctx, int dma_fd,
     GLuint *texture);
 
 #endif // _BAYER2RAW_H
