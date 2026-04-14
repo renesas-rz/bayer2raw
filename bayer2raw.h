@@ -3,7 +3,9 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#if defined(EGLEXT_REL) && EGLEXT_REL
 #include <EGL/eglext_REL.h>
+#endif
 #include <EGL/eglplatform.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>

@@ -335,6 +335,7 @@ void bayer2raw_free_all_inbuf(struct context_bayer2rgb *ctx)
 int bayer2raw_create_outbuf(struct context_bayer2rgb *ctx,
                             unsigned long address)
 {
+#if defined(EGLEXT_REL) && EGLEXT_REL
   struct extern_buffer buffer;
   EGLNativePixmapTypeREL  sNativePixmap;
   NativePixmapType eglPixmap;
@@ -358,6 +359,9 @@ int bayer2raw_create_outbuf(struct context_bayer2rgb *ctx,
   }
 
   return import_extern_outbuf(ctx, &buffer);
+#else /* Not support */
+  return -1;
+#endif
 }
 
 int bayer2raw_create_outbuf_dmabuf(struct context_bayer2rgb *ctx, int dma_fd)

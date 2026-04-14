@@ -19,7 +19,8 @@ RM ?= rm -rfv
 LINKFLAGS ?= -lEGL -lGLESv2
 LDLIBS ?=
 
-.PHONY: $(TARGET)
+EGLEXT_REL := EGL/eglext_REL.h
+
 .PHONY: clean
 
 # Path for .c , .h and .o Files
@@ -28,8 +29,17 @@ OBJ_PATH ?= ./
 OUT_PATH ?= ./
 INC_PATH ?= -I ./
 
+define check_header
+	$(if $(filter 0, $(shell echo "#include <$(1)>" | $(CC) -x c -M - 2>/dev/null | grep -c "$(1)")),\
+		no, yes)
+endef
+
+ifeq ($(strip $(call check_header,$(EGLEXT_REL))), yes)
+CFLAGS += -DEGLEXT_REL=1
+endif
 # Executable Name
 TARGET := $(OUT_PATH)/libbayer2raw.so
+
 
 # Files to compile
 # ./src/main.c ./src/dlist.c
