@@ -339,7 +339,7 @@ static struct extern_buffer *create_eglImage_from_dmabuf(struct context_bayer2rg
     return NULL;
   }
 
-  if (dma_fd <= 0) {
+  if (dma_fd < 0) {
     printf("%s: The input FD is invalid \n", __FUNCTION__);
     return NULL;
   }
@@ -462,7 +462,7 @@ int bayer2raw_create_outbuf_dmabuf(struct context_bayer2rgb *ctx, int dma_fd)
     return -1;
   }
 
-  if (dma_fd <= 0) {
+  if (dma_fd < 0) {
     printf("%s: The input FD is invalid \n", __FUNCTION__);
     return -1;
   }
