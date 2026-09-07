@@ -59,6 +59,12 @@ static int
 compile_shader (const char *FName, GLuint shader_handle)
 {
   FILE *fptr = NULL;
+
+  if (!FName) {
+    printf ("%s: shader file path is NULL\n", __FUNCTION__);
+    return -1;
+  }
+
   fptr = fopen (FName, "rb");
 
   if (fptr == NULL)
@@ -114,6 +120,11 @@ load_shaders (const char *file_vertex, const char *file_frag,
   GLuint pixel_shader_handle;
   GLuint vert_shader_handle;
 
+  if (!file_vertex || !file_frag || !program_handle) {
+    printf ("%s: invalid shader input parameters\n", __FUNCTION__);
+    return -1;
+  }
+
   vert_shader_handle = glCreateShader (GL_VERTEX_SHADER);
   pixel_shader_handle = glCreateShader (GL_FRAGMENT_SHADER);
 
@@ -156,6 +167,11 @@ print_opengl_error (const char *file, int line)
 {
   GLenum err;
 
+  if (!file) {
+    printf ("%s: invalid log file pointer\n", __FUNCTION__);
+    return;
+  }
+
   err = glGetError ();
 
   while (err != GL_NO_ERROR) {
@@ -190,6 +206,11 @@ init_bayer_rgb_conversion (struct context_bayer2rgb *ctx)
   int ret;
   GLint loc_vertices;
   GLint loc_texcoord;
+
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return -1;
+  }
 
   if (!eglMakeCurrent (ctx->display, ctx->surface, ctx->surface,
       ctx->context)) {
@@ -257,6 +278,11 @@ init_bayer_rgb_conversion (struct context_bayer2rgb *ctx)
 int
 init_bayer_rgb_conversion_extern_output(struct context_bayer2rgb *ctx)
 {
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return -1;
+  }
+
   eglCreateImageKHR  = (EGLCREATEIMAGEKHR)
                        eglGetProcAddress("eglCreateImageKHR");
   eglDestroyImageKHR = (EGLDESTROYIMAGEKHR)
@@ -276,6 +302,11 @@ static struct extern_buffer *create_eglImage_from_dmabuf(struct context_bayer2rg
 {
   struct extern_buffer *tmp;
   EGLImageKHR pEGLImage;
+
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return NULL;
+  }
 
   if (dma_fd <= 0) {
     printf("%s: The input FD is invalid \n", __FUNCTION__);
@@ -322,6 +353,11 @@ static struct extern_buffer *create_eglImage_from_dmabuf(struct context_bayer2rg
 
 void bayer2raw_free_all_inbuf(struct context_bayer2rgb *ctx)
 {
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return;
+  }
+
   for (int i = 0; i < ctx->num_inbuf; i++) {
     if (ctx->in_buf[i].pEGLImage != EGL_NO_IMAGE_KHR)
       eglDestroyImageKHR(ctx->display, ctx->in_buf[i].pEGLImage);
@@ -335,6 +371,10 @@ void bayer2raw_free_all_inbuf(struct context_bayer2rgb *ctx)
 int bayer2raw_create_outbuf(struct context_bayer2rgb *ctx,
                             unsigned long address)
 {
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return -1;
+  }
 #if defined(EGLEXT_REL) && EGLEXT_REL
   struct extern_buffer buffer;
   EGLNativePixmapTypeREL  sNativePixmap;
@@ -368,6 +408,11 @@ int bayer2raw_create_outbuf_dmabuf(struct context_bayer2rgb *ctx, int dma_fd)
 {
   struct extern_buffer buffer;
 
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return -1;
+  }
+
   if (dma_fd <= 0) {
     printf("%s: The input FD is invalid \n", __FUNCTION__);
     return -1;
@@ -398,6 +443,11 @@ int import_extern_outbuf(struct context_bayer2rgb *ctx,
 {
   int index = -1;
   void *tmp;
+
+  if (!ctx || !buffer) {
+    printf ("%s: invalid buffer arguments\n", __FUNCTION__);
+    return -1;
+  }
 
   glGenFramebuffers(1, (GLuint *)&buffer->fb);
   glGenRenderbuffers(1, (GLuint *)&buffer->rb);
@@ -459,6 +509,11 @@ done:
 int
 bayer2raw_attach_render_outbuf(struct context_bayer2rgb *ctx, int index)
 {
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return -1;
+  }
+
   if (index < 0)
     return -1;
 
@@ -475,6 +530,11 @@ bayer2raw_free_all_outbuf(struct context_bayer2rgb *ctx)
 {
   int i;
   struct extern_buffer *buffer;
+
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return;
+  }
 
   for (i = 0; i < ctx->num_outbuf; i++) {
     buffer = &ctx->out_buf[i];
@@ -493,6 +553,11 @@ bayer2raw_free_all_outbuf(struct context_bayer2rgb *ctx)
 void
 bayer_rgb_conversion(struct context_bayer2rgb *ctx, void *in_buf)
 {
+  if (!ctx || !in_buf) {
+    printf ("%s: invalid conversion input\n", __FUNCTION__);
+    return;
+  }
+
   /* Map the bayer buffer */
   glBindTexture (GL_TEXTURE_2D, ctx->bayer_texture);
 
@@ -514,6 +579,11 @@ void
 do_bayer_rgb_conversion (struct context_bayer2rgb *ctx, void *in_buf,
     void *out_buf)
 {
+  if (!ctx || !in_buf) {
+    printf ("%s: invalid conversion input\n", __FUNCTION__);
+    return;
+  }
+
   bayer_rgb_conversion (ctx, in_buf);
 
   if (out_buf) {
@@ -528,6 +598,11 @@ void
 do_bayer_rgb_conversion_texture(struct context_bayer2rgb *ctx, void *in_buf,
     GLuint *texture)
 {
+  if (!ctx || !in_buf) {
+    printf ("%s: invalid conversion input\n", __FUNCTION__);
+    return;
+  }
+
   bayer_rgb_conversion (ctx, in_buf);
 
   if (texture)
@@ -538,6 +613,11 @@ int do_bayer_rgb_conversion_texture_dmabuf(struct context_bayer2rgb *ctx, int dm
     GLuint *texture)
 {
   struct extern_buffer *in_buf = create_eglImage_from_dmabuf(ctx, dma_fd);
+
+  if (!ctx) {
+    printf ("%s: context is NULL\n", __FUNCTION__);
+    return -1;
+  }
 
   if (!in_buf || in_buf->pEGLImage == EGL_NO_IMAGE_KHR)
     return -1;
