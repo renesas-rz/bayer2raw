@@ -67,7 +67,7 @@ compile_shader (const char *FName, GLuint shader_handle)
 
   fptr = fopen (FName, "rb");
 
-  if (fptr == NULL)
+  if (!fptr)
     return -1;
 
   int length;
@@ -76,10 +76,15 @@ compile_shader (const char *FName, GLuint shader_handle)
   fseek (fptr, 0, SEEK_SET);
 
   char *shaderSource = malloc (sizeof (char) * (unsigned int) length);
-  if (shaderSource == NULL)
+  if (!shaderSource) {
+    fclose (fptr);
     return -1;
-  if (!fread (shaderSource, (size_t) length, 1, fptr))
+  }
+  if (!fread (shaderSource, (size_t) length, 1, fptr)) {
+    free (shaderSource);
+    fclose (fptr);
     return -1;
+  }
 
   glShaderSource (shader_handle, 1, (const char *const *) &shaderSource,
       &length);
@@ -119,6 +124,7 @@ load_shaders (const char *file_vertex, const char *file_frag,
 {
   GLuint pixel_shader_handle;
   GLuint vert_shader_handle;
+  int err = 0;
 
   if (!file_vertex || !file_frag || !program_handle) {
     printf ("%s: invalid shader input parameters\n", __FUNCTION__);
@@ -128,11 +134,15 @@ load_shaders (const char *file_vertex, const char *file_frag,
   vert_shader_handle = glCreateShader (GL_VERTEX_SHADER);
   pixel_shader_handle = glCreateShader (GL_FRAGMENT_SHADER);
 
-  if (compile_shader (file_vertex, vert_shader_handle) == -1)
-    return -1;
+  if (compile_shader (file_vertex, vert_shader_handle) == -1) {
+    err = -1;
+    goto done;
+  }
 
-  if (compile_shader (file_frag, pixel_shader_handle) == -1)
-    return -1;
+  if (compile_shader (file_frag, pixel_shader_handle) == -1) {
+    err = -1;
+    goto done;
+  }
 
   *program_handle = glCreateProgram ();
   glAttachShader (*program_handle, vert_shader_handle);
@@ -156,10 +166,19 @@ load_shaders (const char *file_vertex, const char *file_frag,
 
       free (infoLog);
     }
-    return -1;
+
+    glDeleteProgram (*program_handle);
+    err = -1;
+    goto done;
   }
 
-  return 0;
+done:
+  if (vert_shader_handle)
+    glDeleteShader (vert_shader_handle);
+  if (pixel_shader_handle)
+    glDeleteShader (pixel_shader_handle);
+
+  return err;
 }
 
 void
@@ -381,8 +400,10 @@ void bayer2raw_free_all_inbuf(struct context_bayer2rgb *ctx)
   }
 
   ctx->num_inbuf = 0;
-  if (ctx->in_buf)
+  if (ctx->in_buf) {
     free(ctx->in_buf);
+    ctx->in_buf = NULL;
+  }
 }
 
 int bayer2raw_create_outbuf(struct context_bayer2rgb *ctx,
@@ -584,8 +605,10 @@ bayer2raw_free_all_outbuf(struct context_bayer2rgb *ctx)
       glDeleteFramebuffers(1, (GLuint *)&buffer->fb);
   }
   ctx->num_outbuf = 0;
-  if (ctx->out_buf)
+  if (ctx->out_buf) {
     free(ctx->out_buf);
+    ctx->out_buf = NULL;
+  }
 }
 
 void
