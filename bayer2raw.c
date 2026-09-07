@@ -287,6 +287,13 @@ init_bayer_rgb_conversion_extern_output(struct context_bayer2rgb *ctx)
                        eglGetProcAddress("eglCreateImageKHR");
   eglDestroyImageKHR = (EGLDESTROYIMAGEKHR)
                        eglGetProcAddress("eglDestroyImageKHR");
+
+  if (!eglCreateImageKHR || !eglDestroyImageKHR) {
+      printf("%s: Failed to get EGLImageKHR function pointers\n",
+            __FUNCTION__);
+      return -1;
+  }
+
   glEGLImageTargetRenderbufferStorage =
                    (PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC)
                    eglGetProcAddress("glEGLImageTargetRenderbufferStorageOES");
@@ -305,6 +312,11 @@ static struct extern_buffer *create_eglImage_from_dmabuf(struct context_bayer2rg
 
   if (!ctx) {
     printf ("%s: context is NULL\n", __FUNCTION__);
+    return NULL;
+  }
+
+  if (!eglCreateImageKHR || !eglDestroyImageKHR) {
+    printf ("%s: EGLImageKHR function pointers are not initialized\n", __FUNCTION__);
     return NULL;
   }
 
@@ -358,6 +370,11 @@ void bayer2raw_free_all_inbuf(struct context_bayer2rgb *ctx)
     return;
   }
 
+  if (!eglDestroyImageKHR) {
+    printf ("%s: eglDestroyImageKHR is NULL\n", __FUNCTION__);
+    return;
+  }
+
   for (int i = 0; i < ctx->num_inbuf; i++) {
     if (ctx->in_buf[i].pEGLImage != EGL_NO_IMAGE_KHR)
       eglDestroyImageKHR(ctx->display, ctx->in_buf[i].pEGLImage);
@@ -375,6 +392,12 @@ int bayer2raw_create_outbuf(struct context_bayer2rgb *ctx,
     printf ("%s: context is NULL\n", __FUNCTION__);
     return -1;
   }
+
+  if (!eglCreateImageKHR) {
+    printf ("%s: eglCreateImageKHR is NULL\n", __FUNCTION__);
+    return -1;
+  }
+
 #if defined(EGLEXT_REL) && EGLEXT_REL
   struct extern_buffer buffer;
   EGLNativePixmapTypeREL  sNativePixmap;
@@ -413,6 +436,11 @@ int bayer2raw_create_outbuf_dmabuf(struct context_bayer2rgb *ctx, int dma_fd)
     return -1;
   }
 
+  if (!eglCreateImageKHR) {
+    printf ("%s: eglCreateImageKHR is NULL\n", __FUNCTION__);
+    return -1;
+  }
+
   if (dma_fd <= 0) {
     printf("%s: The input FD is invalid \n", __FUNCTION__);
     return -1;
@@ -446,6 +474,11 @@ int import_extern_outbuf(struct context_bayer2rgb *ctx,
 
   if (!ctx || !buffer) {
     printf ("%s: invalid buffer arguments\n", __FUNCTION__);
+    return -1;
+  }
+
+  if (!glEGLImageTargetRenderbufferStorage) {
+    printf ("%s: glEGLImageTargetRenderbufferStorage is NULL\n", __FUNCTION__);
     return -1;
   }
 
@@ -536,6 +569,11 @@ bayer2raw_free_all_outbuf(struct context_bayer2rgb *ctx)
     return;
   }
 
+  if (!eglDestroyImageKHR) {
+    printf ("%s: eglDestroyImageKHR is NULL\n", __FUNCTION__);
+    return;
+  }
+
   for (i = 0; i < ctx->num_outbuf; i++) {
     buffer = &ctx->out_buf[i];
     if (buffer->pEGLImage != EGL_NO_IMAGE_KHR)
@@ -616,6 +654,11 @@ int do_bayer_rgb_conversion_texture_dmabuf(struct context_bayer2rgb *ctx, int dm
 
   if (!ctx) {
     printf ("%s: context is NULL\n", __FUNCTION__);
+    return -1;
+  }
+
+  if (!glEGLImageTargetTexture2D) {
+    printf ("%s: glEGLImageTargetTexture2D is NULL\n", __FUNCTION__);
     return -1;
   }
 
