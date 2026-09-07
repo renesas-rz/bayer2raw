@@ -106,7 +106,7 @@ compile_shader (const char *FName, GLuint shader_handle)
       /* Retrieve error. */
       glGetShaderInfoLog (shader_handle, error_buf_size,
           &error_length, info_log);
-      info_log[error_buf_size + 1] = '\0';
+      info_log[error_buf_size] = '\0';
       printf ("%s\n", info_log);
       free (info_log);
     }
@@ -162,7 +162,7 @@ load_shaders (const char *file_vertex, const char *file_frag,
       /* Retrieve error. */
       glGetProgramInfoLog (*program_handle, errorBufSize,
           &errorLength, infoLog);
-      infoLog[errorBufSize + 1] = '\0';
+      infoLog[errorBufSize] = '\0';
 
       free (infoLog);
     }
