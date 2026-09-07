@@ -155,7 +155,7 @@ load_shaders (const char *file_vertex, const char *file_frag,
   if (!linked) {
     /* Retrieve error buffer size. */
     GLint errorBufSize, errorLength;
-    glGetShaderiv (*program_handle, GL_INFO_LOG_LENGTH, &errorBufSize);
+    glGetProgramiv (*program_handle, GL_INFO_LOG_LENGTH, &errorBufSize);
 
     char *infoLog = malloc ((unsigned int) errorBufSize * sizeof (char) + 1);
     if (infoLog) {
