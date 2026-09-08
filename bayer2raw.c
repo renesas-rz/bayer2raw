@@ -194,7 +194,7 @@ print_opengl_error (const char *file, int line)
   err = glGetError ();
 
   while (err != GL_NO_ERROR) {
-    char error[128];
+    char error[128] = {0};
 
     switch (err) {
       case GL_INVALID_OPERATION:
@@ -211,6 +211,9 @@ print_opengl_error (const char *file, int line)
         break;
       case GL_INVALID_FRAMEBUFFER_OPERATION:
         strcpy (error, "INVALID_FRAMEBUFFER_OPERATION");
+        break;
+      default:
+        strcpy (error, "UNKNOWN_ERROR");
         break;
     }
 
