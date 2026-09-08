@@ -568,7 +568,7 @@ bayer2raw_attach_render_outbuf(struct context_bayer2rgb *ctx, int index)
     return -1;
   }
 
-  if (index < 0)
+  if (index < 0 || index >= ctx->num_outbuf)
     return -1;
 
   glBindFramebuffer( GL_FRAMEBUFFER, (GLuint)ctx->out_buf[index].fb);
