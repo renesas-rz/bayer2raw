@@ -52,9 +52,6 @@ static const GLfloat texture_coords[][2] = {
   {1.0f, 0.0f}
 };
 
-/* For dynamic vertices data*/
-static GLfloat *vertices_data = &screen_vertices[0][0];
-
 static int
 compile_shader (const char *FName, GLuint shader_handle)
 {
@@ -262,7 +259,7 @@ init_bayer_rgb_conversion (struct context_bayer2rgb *ctx)
 
   /* Set data in the arrays. */
   glVertexAttribPointer ((GLuint) loc_vertices, 2, GL_FLOAT, GL_FALSE, 0,
-      vertices_data);
+      &screen_vertices[0][0]);
   glVertexAttribPointer ((GLuint) loc_texcoord, 2, GL_FLOAT, GL_FALSE, 0,
       &texture_coords[0][0]);
   PRINT_OGL_ERROR ();
@@ -321,9 +318,6 @@ init_bayer_rgb_conversion_extern_output(struct context_bayer2rgb *ctx)
                    eglGetProcAddress("glEGLImageTargetRenderbufferStorageOES");
   glEGLImageTargetTexture2D = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)
                               eglGetProcAddress("glEGLImageTargetTexture2DOES");
-  /* When using external output buffer, the read/write memory order is different
-   * with internal GLES, so that we need to use the other vertices*/
-  vertices_data = &flip_screen_vertices[0][0];
   return init_bayer_rgb_conversion(ctx);
 }
 
@@ -575,6 +569,9 @@ bayer2raw_attach_render_outbuf(struct context_bayer2rgb *ctx, int index)
     return -1;
 
   glBindFramebuffer( GL_FRAMEBUFFER, (GLuint)ctx->out_buf[index].fb);
+  /* External output buffer is read top row first: use flipped vertices */
+  glVertexAttribPointer ((GLuint) glGetAttribLocation (ctx->programHandle,
+      "position"), 2, GL_FLOAT, GL_FALSE, 0, &flip_screen_vertices[0][0]);
   ctx->re_paint = ctx->out_buf[index].repaint;
   if (!ctx->out_buf[index].repaint)
     ctx->out_buf[index].repaint = 1;
